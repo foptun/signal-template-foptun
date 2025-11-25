@@ -1,0 +1,107 @@
+//@version=5
+strategy("Signal Template by FopTun", overlay=true, precision=6)
+
+xprd1 = input.int(title="EMA 1 period", defval=5)
+xprd2 = input.int(title="EMA 2 period", defval=10)
+xprd3 = input.int(title="EMA 3 period", defval=20)
+xprd4 = input.int(title="EMA 4 period", defval=50)
+xprd5 = input.int(title="EMA 5 period", defval=100)
+xprd6 = input.int(title="EMA 6 period", defval=200)
+
+len = input.int(title="Length", defval=14)
+th = input.int(title="threshold", defval=20)
+avg = input.int(title="SMA", defval=5)
+avg2 = input.int(title="SMA2", defval=10)
+
+TrueRange = math.max(math.max(high-low, math.abs(high-nz(close[1]))), math.abs(low-nz(close[1])))
+DirectionalMovementPlus = high-nz(high[1]) > nz(low[1])-low ? math.max(high-nz(high[1]), 0): 0
+DirectionalMovementMinus = nz(low[1])-low > high-nz(high[1]) ? math.max(nz(low[1])-low, 0): 0
+
+SmoothedTrueRange = 0.0
+SmoothedTrueRange := nz(SmoothedTrueRange[1]) - (nz(SmoothedTrueRange[1])/len) + TrueRange
+
+SmoothedDirectionalMovementPlus = 0.0
+SmoothedDirectionalMovementPlus := nz(SmoothedDirectionalMovementPlus[1]) - (nz(SmoothedDirectionalMovementPlus[1])/len) + DirectionalMovementPlus
+
+SmoothedDirectionalMovementMinus = 0.0
+SmoothedDirectionalMovementMinus := nz(SmoothedDirectionalMovementMinus[1]) - (nz(SmoothedDirectionalMovementMinus[1])/len) + DirectionalMovementMinus
+
+DIPlus = SmoothedDirectionalMovementPlus / SmoothedTrueRange * 100
+DIMinus = SmoothedDirectionalMovementMinus / SmoothedTrueRange * 100
+DX = math.abs(DIPlus-DIMinus) / (DIPlus+DIMinus)*100
+ADX = ta.sma(DX, len)
+SMA = ta.sma(ADX, avg)
+SMA2 = ta.sma(ADX, avg2)
+
+Bull = DIPlus > DIMinus
+Bear = DIMinus > DIPlus
+
+Green = Bull  // Buy
+Red = Bear  // Sell
+
+buycond = Green and Green[1] == 0
+sellcond = Red and Red[1] == 0
+
+bullish = ta.barssince(buycond) < ta.barssince(sellcond)
+bearish = ta.barssince(sellcond) < ta.barssince(buycond)
+
+buy = bearish[1] and buycond
+sell = bullish[1] and sellcond
+// buy =  Bull and Bull[1] == 0 // แบบลัด
+// sell =  Bear and Bear[1] == 0 // แบบลัด
+
+if (buy)
+    strategy.entry("Long Entry", strategy.long)
+
+if (sell)
+    strategy.entry("Short Entry", strategy.short)
+
+plotshape(true ? buy : na,
+ style=shape.circle,
+ title='Buy Signal',
+ location=location.belowbar,
+ color=color.new(#4caf50, 0))
+
+plotshape(true ? sell : na,
+ style=shape.circle,
+ title='Sell Signal',
+ location=location.abovebar,
+ color=color.new(#f23645, 0))
+
+textBuy = label.new(bar_index, na,
+ text="Buy",
+ color=color.new(#4caf50, 0),
+ textcolor=color.white,
+ yloc=yloc.belowbar,
+ style=label.style_label_up)
+
+label.delete(buy != true ? textBuy : na)
+
+textSell = label.new(bar_index, na,
+ text="Sell",
+ color=color.new(#f23645, 0),
+ textcolor=color.white,
+ yloc=yloc.abovebar,
+ style=label.style_label_down)
+
+label.delete(sell != true ? textSell : na)
+
+xEma1 = ta.ema(close, xprd1)
+xEma2 = ta.ema(close, xprd2)
+xEma3 = ta.ema(close, xprd3)
+xEma4 = ta.ema(close, xprd4)
+xEma5 = ta.ema(close, xprd5)
+xEma6 = ta.ema(close, xprd6)
+
+plot(xEma1, color=color.new(#ff0000, 0), title="Ema 1")
+plot(xEma2, color=color.new(#0000ff, 0), title="Ema 2")
+plot(xEma3, color=color.new(#29c0c3, 0), title="Ema 3")
+plot(xEma4, color=color.new(#d0ff01, 0), title="Ema 4")
+plot(xEma5, color=color.new(#ff0084, 0), title="Ema 5")
+plot(xEma6, color=color.new(#8800ff, 0), title="Ema 6")
+
+// plot(DIMinus, color=red, title="DI-")
+// plot(ADX, color=yellow, title="ADX")
+// plot(SMA, color=white, title="SMA")
+// plot(SMA2, color=white, title="SMA2")
+// hline(th, color=black, linestyle=dashed)

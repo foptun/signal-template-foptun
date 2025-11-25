@@ -1,0 +1,191 @@
+//@version=5
+// -----------------------------------------------------------------------------
+// ชื่อกลยุทธ์: 1m Price Action Trend Pullback Strategy (ปรับปรุง + TDI Bands)
+// คำอธิบาย:
+// กลยุทธ์นี้ใช้ EMA Crossover (21/50) เพื่อระบุเทรนด์หลัก
+// และใช้การ Pullback (ย่อตัว) กลับมาที่ Fast EMA (21) เป็นสัญญาณเข้า
+//
+// การปรับปรุง:
+// - แก้ไข: ตั้งค่า Stop Loss (ATR) และ Risk/Reward Ratio (RR)
+// - แก้ไข: เพิ่ม Input สำหรับตั้งค่า Commission (ค่าเริ่มต้น 0%)
+// - เพิ่ม: ตัวกรอง Sideways ด้วย ADX
+// - เพิ่ม: ตรวจสอบ Volume ของแท่งสัญญาณ ถ้าต่ำกว่า MA ให้แสดงป้ายสีเหลือง
+// - เพิ่ม: เพิ่มตัวกรองเทรนด์ด้วย TDI (Market Base Line)
+// - (เพิ่มใหม่): เพิ่ม TDI Volatility Bands (BB on RSI) เพื่อกรองสัญญาณ
+//   Overbought/Oversold ซึ่งเหมาะกับ XAUUSD
+// -----------------------------------------------------------------------------
+
+// --- 1. การตั้งค่า (INPUTS) ---
+
+// กลุ่มการตั้งค่ากลยุทธ์
+grp_strat = "Strategy Settings"
+commission_input = input.float(0.0, "Commission (%)", minval=0, step=0.001, group=grp_strat)
+
+// กลุ่ม Moving Averages
+grp_ma = "Moving Averages"
+fast_len = input.int(21, "Fast EMA Length", group=grp_ma)
+slow_len = input.int(50, "Slow EMA Length", group=grp_ma)
+
+// กลุ่ม Stop Loss / Take Profit
+grp_exit = "Stop Loss / Take Profit"
+atr_len = input.int(14, "ATR Length", group=grp_exit)
+sl_multiplier = input.float(1.5, "Stop Loss (ATR Multiplier)", step=0.1, group=grp_exit)
+rr_ratio = input.float(2.0, "Risk/Reward Ratio (RR)", step=0.1, group=grp_exit)
+
+// กลุ่มตัวกรอง Sideways (ADX)
+grp_filter = "Sideways Filter (ADX)"
+use_adx_filter = input.bool(true, "Use ADX Filter", group=grp_filter)
+dmi_len = input.int(14, "DMI Length", group=grp_filter)
+adx_smoothing_len = input.int(14, "ADX Smoothing Length", group=grp_filter)
+adx_threshold = input.int(20, "ADX Threshold (Trade above this)", group=grp_filter)
+
+// กลุ่มตัวกรอง Volume
+grp_vol = "Volume Filter"
+use_volume_filter = input.bool(true, "Use Volume Filter (Yellow Signal)", group=grp_vol)
+volume_ma_len = input.int(20, "Volume MA Length", group=grp_vol)
+
+// (เพิ่มใหม่) กลุ่มตัวกรอง TDI
+grp_tdi = "TDI Trend Filter"
+use_tdi_filter = input.bool(true, "Use TDI Trend Filter", group=grp_tdi)
+tdi_rsi_len = input.int(13, "TDI: RSI Length", group=grp_tdi)
+tdi_price_len = input.int(2, "TDI: Price Line (Fast MA)", group=grp_tdi)
+tdi_mbl_len = input.int(34, "TDI: Market Base Line (Mid MA)", group=grp_tdi)
+// (เพิ่มใหม่) TDI Volatility Bands
+use_tdi_band_filter = input.bool(true, "Use TDI Volatility Bands Filter", group=grp_tdi)
+tdi_band_len = input.int(34, "TDI: Volatility Band Length", group=grp_tdi)
+tdi_band_mult = input.float(1.618, "TDI: Volatility Band Multiplier", step=0.1, group=grp_tdi)
+
+
+// --- STRATEGY DECLARATION ---
+strategy("FopTun PA Trend Pullback (TDI Bands)",
+     overlay=true,
+     shorttitle="FopTun_PA_Pullback_TDI_v1",
+     default_qty_type=strategy.percent_of_equity,
+     default_qty_value=100,
+     commission_value=0, 
+     commission_type=strategy.commission.percent,
+     slippage=2)
+
+
+// --- 2. การคำนวณ (CALCULATIONS) ---
+fast_ma = ta.ema(close, fast_len)
+slow_ma = ta.ema(close, slow_len)
+atr = ta.atr(atr_len)
+
+// คำนวณ TP Multiplier จาก SL และ RR ที่ตั้งค่าไว้
+float tp_multiplier = sl_multiplier * rr_ratio
+
+// คำนวณ ADX
+[_, _, adx] = ta.dmi(dmi_len, adx_smoothing_len)
+
+// คำนวณ Volume MA
+volume_ma = ta.sma(volume, volume_ma_len)
+
+// (อัปเดต) คำนวณ TDI และ Volatility Bands
+rsi = ta.rsi(close, tdi_rsi_len)
+tdi_price_line = ta.sma(rsi, tdi_price_len)  // TDI Green
+tdi_mbl = ta.sma(rsi, tdi_mbl_len)          // TDI Yellow (Market Base Line)
+// (เพิ่มใหม่)
+tdi_band_basis = ta.sma(rsi, tdi_band_len)
+tdi_band_dev = ta.stdev(rsi, tdi_band_len) * tdi_band_mult
+tdi_upper_band = tdi_band_basis + tdi_band_dev
+tdi_lower_band = tdi_band_basis - tdi_band_dev
+
+
+// --- 3. ตรรกะของกลยุทธ์ (STRATEGY LOGIC) ---
+
+// 3.1. การระบุเทรนด์ (Trend Definition) (อัปเดตตรรกะ)
+// ตรวจสอบเทรนด์จาก EMAs
+bool ema_uptrend = fast_ma > slow_ma
+bool ema_downtrend = fast_ma < slow_ma
+
+// (อัปเดต) ตรวจสอบเทรนด์จาก TDI และ Bands
+bool tdi_uptrend_base = tdi_price_line > tdi_mbl
+bool tdi_downtrend_base = tdi_price_line < tdi_mbl
+
+// (เพิ่มใหม่) ตรวจสอบว่าไม่อยู่ในโซน Overbought/Oversold
+bool tdi_not_overbought = tdi_price_line < tdi_upper_band
+bool tdi_not_oversold = tdi_price_line > tdi_lower_band
+
+// (อัปเดต) เงื่อนไขฟิลเตอร์ TDI
+bool tdi_filter_buy = tdi_uptrend_base and (not use_tdi_band_filter or tdi_not_overbought)
+bool tdi_filter_sell = tdi_downtrend_base and (not use_tdi_band_filter or tdi_not_oversold)
+
+// (อัปเดต) เงื่อนไขเทรนด์สุดท้าย
+bool is_uptrend = ema_uptrend and (not use_tdi_filter or tdi_filter_buy)
+bool is_downtrend = ema_downtrend and (not use_tdi_filter or tdi_filter_sell)
+
+
+// 3.2. เงื่อนไขการย่อตัว (Pullback Conditions)
+bool pullback_buy_check = close[1] < fast_ma[1]
+bool pullback_sell_check = close[1] > fast_ma[1]
+
+// 3.3. ตรรกะตัวกรอง Sideways (Sideways Filter Logic)
+bool is_trending = adx > adx_threshold
+bool filter_passed = (not use_adx_filter) or is_trending
+
+// 3.4. สัญญาณเข้า (Entry Triggers)
+bool buy_trigger = is_uptrend and pullback_buy_check and (close > fast_ma) and filter_passed
+bool sell_trigger = is_downtrend and pullback_sell_check and (close < fast_ma) and filter_passed
+
+// --- 4. การจัดการคำสั่ง (ORDER MANAGEMENT) ---
+
+var float long_stop_price = na
+var float long_tp_price = na
+var float short_stop_price = na
+var float short_tp_price = na
+
+if (buy_trigger and strategy.position_size == 0)
+    long_stop_price := close - (atr * sl_multiplier)
+    long_tp_price := close + (atr * tp_multiplier)
+    strategy.entry("Buy", strategy.long)
+
+if (sell_trigger and strategy.position_size == 0)
+    short_stop_price := close + (atr * sl_multiplier)
+    short_tp_price := close - (atr * tp_multiplier)
+    strategy.entry("Sell", strategy.short)
+
+// 4.2. การส่งคำสั่งออก (Strategy Exit)
+if (strategy.position_size > 0)
+    strategy.exit("Long Exit", from_entry="Buy", stop=long_stop_price, limit=long_tp_price)
+
+if (strategy.position_size < 0)
+    strategy.exit("Short Exit", from_entry="Sell", stop=short_stop_price, limit=short_tp_price)
+
+// --- 5. การแสดงผลบนกราฟ (PLOTTING) ---
+
+// 5.1. พล็อตเส้น EMAs
+plot(fast_ma, "Fast EMA", color=color.new(#ffffff, 0), linewidth=2)
+plot(slow_ma, "Slow EMA", color=color.new(#ff0000, 0), linewidth=2)
+
+// 5.2a. ตรรกะสีกำกับสัญญาณตาม Volume
+bool pass_vol_check = (not use_volume_filter) or (volume > volume_ma)
+
+// สีสำหรับ Buy: ถ้าผ่าน = สีเขียว, ถ้าไม่ผ่าน (Volume น้อย) = สีเหลือง
+color buy_label_color = pass_vol_check ? color.new(color.green, 0) : color.new(color.blue, 0)
+// สีสำหรับ Sell: ถ้าผ่าน = สีแดง, ถ้าไม่ผ่าน (Volume น้อย) = สีเหลือง
+color sell_label_color = pass_vol_check ? color.new(color.red, 0) : color.new(color.blue, 0)
+
+
+// 5.2. พล็อตสัญญาณ "B" และ "S"
+plotshape(buy_trigger,
+     style=shape.labelup,
+     location=location.belowbar,
+     color=buy_label_color, 
+     text="B",
+     textcolor=color.new(color.white, 0),
+     size=size.tiny,
+     title="Buy Signal")
+
+plotshape(sell_trigger,
+     style=shape.labeldown,
+     location=location.abovebar,
+     color=sell_label_color, 
+     text="S",
+     textcolor=color.new(color.white, 0),
+     size=size.tiny,
+     title="Sell Signal")
+
+// 5.3. ระบายสีพื้นหลังตามเทรนด์
+color bg_color = filter_passed ? (is_uptrend ? color.new(color.blue, 90) : is_downtrend ? color.new(color.orange, 90) : na) : color.new(color.gray, 90)
+bgcolor(bg_color)
