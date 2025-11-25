@@ -68,7 +68,7 @@ grp_sess = "Session Settings"
 show_sessions = input.bool(true, "Show Session Backgrounds", group=grp_sess)
 // Asia (Tokyo) default: 09:00 - 15:00 JST
 asia_sess_time = input.session("0900-1500", "Asia Session Time", group=grp_sess)
-asia_color = input.color(color.new(color.yellow, 92), "Asia Color", group=grp_sess)
+asia_color = input.color(color.new(color.blue, 92), "Asia Color", group=grp_sess)
 
 // London default: 08:00 - 16:30 London Time
 london_sess_time = input.session("0800-1630", "London Session Time", group=grp_sess)
