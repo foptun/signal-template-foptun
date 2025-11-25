@@ -75,7 +75,7 @@ london_sess_time = input.session("0730-1630", "London Session Time", group=grp_s
 london_color = input.color(color.new(color.green, 92), "London Color", group=grp_sess)
 
 // New York default: 08:00 - 17:00 New York Time
-ny_sess_time = input.session("0830-1700", "New York Session Time", group=grp_sess)
+ny_sess_time = input.session("0800-1700", "New York Session Time", group=grp_sess)
 ny_color = input.color(color.new(color.red, 92), "New York Color", group=grp_sess)
 
 // Session Trading Controls
