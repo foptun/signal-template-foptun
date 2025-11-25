@@ -180,7 +180,7 @@ var float long_trail_offset_ticks = na
 var float short_trail_act_price = na
 var float short_trail_offset_ticks = na
 
-// --- ENTRY EXECUTION ---
+// --- ENTRY EXECUTION ----
 // Gate actual orders by session_pass so entries occur only in allowed sessions
 if (buy_trigger and strategy.position_size == 0 and session_pass)
     // Calculate Fixed SL/TP
