@@ -1,6 +1,6 @@
 //@version=5
 // -----------------------------------------------------------------------------
-// Strategy Name: 1m Price Action Trend Pullback Strategy (Enhanced + TDI Bands + Trailing Stop)
+// Strategy Name: 1m Price Action Trend Pullback Strategy (Enhanced + TDI Bands + Trailing Stop + Sessions)
 // Description:
 // This strategy uses EMA Crossover (21/50) to identify the main trend
 // and uses a Pullback to the Fast EMA (21) as an entry signal.
@@ -12,7 +12,8 @@
 // - Volume Filter (Yellow signal if volume is low)
 // - TDI Trend Filter (Market Base Line)
 // - TDI Volatility Bands (BB on RSI) to avoid Overbought/Oversold entries
-// - (NEW) Trailing Stop System (ATR Based)
+// - Trailing Stop System (ATR Based)
+// - (NEW) Session Backgrounds (Asia, London, New York)
 // -----------------------------------------------------------------------------
 
 // --- 1. SETTINGS (INPUTS) ---
@@ -32,7 +33,7 @@ atr_len = input.int(14, "ATR Length", group=grp_exit)
 sl_multiplier = input.float(1.5, "Stop Loss (ATR Multiplier)", step=0.1, group=grp_exit)
 rr_ratio = input.float(20, "Risk/Reward Ratio (RR)", step=0.1, group=grp_exit)
 
-// Trailing Stop Settings (NEW)
+// Trailing Stop Settings
 grp_trail = "Trailing Stop Settings"
 use_trailing = input.bool(true, "Use Trailing Stop", group=grp_trail)
 trail_activation_mult = input.float(0.1, "Activation (ATR Multiplier)", step=0.01, tooltip="Price must move this many ATRs in profit to activate trailing.", group=grp_trail)
@@ -62,28 +63,26 @@ use_tdi_band_filter = input.bool(true, "Use TDI Volatility Bands Filter", group=
 tdi_band_len = input.int(35, "TDI: Volatility Band Length", group=grp_tdi)
 tdi_band_mult = input.float(1.618, "TDI: Volatility Band Multiplier", step=0.1, group=grp_tdi)
 
-// Session Settings
+// --- (NEW) SESSION SETTINGS ---
 grp_sess = "Session Settings"
-use_session_filter = input.bool(false, "Filter by Session", tooltip="Enable to allow entries only during selected sessions.", group=grp_sess)
+show_sessions = input.bool(true, "Show Session Backgrounds", group=grp_sess)
+// Asia (Tokyo) default: 09:00 - 15:00 JST
+asia_sess_time = input.session("0900-1500", "Asia Session Time", group=grp_sess)
+asia_color = input.color(color.new(color.yellow, 92), "Asia Color", group=grp_sess)
 
-// Configurable sessions (local chart/session time)
-asia_session = input.session("00:00-09:00", "Asia Session Time", group=grp_sess)
-london_session = input.session("07:00-16:00", "London Session Time", group=grp_sess)
-newyork_session = input.session("13:00-22:00", "New York Session Time", group=grp_sess)
+// London default: 08:00 - 16:30 London Time
+london_sess_time = input.session("0800-1630", "London Session Time", group=grp_sess)
+london_color = input.color(color.new(color.green, 92), "London Color", group=grp_sess)
 
-// Which sessions to trade
-trade_asia = input.bool(true, "Trade Asia", group=grp_sess)
-trade_london = input.bool(true, "Trade London", group=grp_sess)
-trade_newyork = input.bool(true, "Trade New York", group=grp_sess)
-
-// Show background colors for sessions
-show_session_bg = input.bool(true, "Show Session Background", group=grp_sess)
+// New York default: 08:00 - 17:00 New York Time
+ny_sess_time = input.session("0800-1700", "New York Session Time", group=grp_sess)
+ny_color = input.color(color.new(color.red, 92), "New York Color", group=grp_sess)
 
 
 // --- STRATEGY DECLARATION ---
-strategy("FopTun PA Pullback v2",
+strategy("FopTun PA Pullback v2 + Sessions",
      overlay=true,
-     shorttitle="FopTun_PA_Pullback_v2",
+     shorttitle="FopTun_PA_Sess",
      default_qty_type=strategy.percent_of_equity,
      default_qty_value=100,
      commission_value=0,
@@ -113,15 +112,6 @@ tdi_band_basis = ta.sma(rsi, tdi_band_len)
 tdi_band_dev = ta.stdev(rsi, tdi_band_len) * tdi_band_mult
 tdi_upper_band = tdi_band_basis + tdi_band_dev
 tdi_lower_band = tdi_band_basis - tdi_band_dev
-
-// Session in-range checks (true when current bar is within the session)
-in_asia = not na(time(timeframe.period, asia_session))
-in_london = not na(time(timeframe.period, london_session))
-in_newyork = not na(time(timeframe.period, newyork_session))
-
-// Combined session pass condition
-bool session_pass = not use_session_filter or 
-     (trade_asia and in_asia) or (trade_london and in_london) or (trade_newyork and in_newyork)
 
 
 // --- 3. STRATEGY LOGIC ---
@@ -157,8 +147,8 @@ bool is_trending = adx > adx_threshold
 bool filter_passed = (not use_adx_filter) or is_trending
 
 // 3.4. Entry Triggers
-bool buy_trigger = is_uptrend and pullback_buy_check and (close > fast_ma) and filter_passed and session_pass
-bool sell_trigger = is_downtrend and pullback_sell_check and (close < fast_ma) and filter_passed and session_pass
+bool buy_trigger = is_uptrend and pullback_buy_check and (close > fast_ma) and filter_passed
+bool sell_trigger = is_downtrend and pullback_sell_check and (close < fast_ma) and filter_passed
 
 
 // --- 4. ORDER MANAGEMENT ---
@@ -251,14 +241,14 @@ plotshape(sell_trigger,
 
 // 5.3. Background Color based on Trend
 color bg_color = filter_passed ? (is_uptrend ? color.new(color.blue, 90) : is_downtrend ? color.new(color.orange, 90) : na) : color.new(color.gray, 90)
-bgcolor(bg_color)
+bgcolor(bg_color, title="Trend Background")
 
-// 5.4. Session Background Colors
-// Asia = Blue, London = Green, New York = Red
-// Draw session backgrounds on top with light transparency
-if show_session_bg and in_asia
-    bgcolor(color.new(color.blue, 85))
-if show_session_bg and in_london
-    bgcolor(color.new(color.green, 85))
-if show_session_bg and in_newyork
-    bgcolor(color.new(color.red, 85))
+// 5.4. (NEW) Session Backgrounds
+// Logic to check if current bar time is in session (Specific Timezones used)
+bool in_asia = not na(time(timeframe.period, asia_sess_time, "Asia/Tokyo"))
+bool in_london = not na(time(timeframe.period, london_sess_time, "Europe/London"))
+bool in_ny = not na(time(timeframe.period, ny_sess_time, "America/New_York"))
+
+bgcolor(show_sessions and in_asia ? asia_color : na, title="Asia Session Background")
+bgcolor(show_sessions and in_london ? london_color : na, title="London Session Background")
+bgcolor(show_sessions and in_ny ? ny_color : na, title="NY Session Background")
