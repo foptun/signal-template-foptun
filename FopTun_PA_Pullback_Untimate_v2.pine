@@ -78,11 +78,18 @@ london_color = input.color(color.new(color.green, 92), "London Color", group=grp
 ny_sess_time = input.session("0800-1700", "New York Session Time", group=grp_sess)
 ny_color = input.color(color.new(color.red, 92), "New York Color", group=grp_sess)
 
+// Session Trading Controls
+use_session_filter = input.bool(false, "Filter by Session (Enable Trading Only in Selected Sessions)", group=grp_sess,
+     tooltip="When enabled, entries will be allowed only during the selected sessions below.")
+trade_asia = input.bool(true, "Trade Asia Session", group=grp_sess)
+trade_london = input.bool(true, "Trade London Session", group=grp_sess)
+trade_ny = input.bool(true, "Trade New York Session", group=grp_sess)
+
 
 // --- STRATEGY DECLARATION ---
-strategy("FopTun PA Pullback v2 + Sessions",
+strategy("Test Session FopTun PA Pullback v2 + Sessions",
      overlay=true,
-     shorttitle="FopTun_PA_Sess",
+     shorttitle="Test_Session_FopTun_PA_Sess",
      default_qty_type=strategy.percent_of_equity,
      default_qty_value=100,
      commission_value=0,
@@ -112,6 +119,14 @@ tdi_band_basis = ta.sma(rsi, tdi_band_len)
 tdi_band_dev = ta.stdev(rsi, tdi_band_len) * tdi_band_mult
 tdi_upper_band = tdi_band_basis + tdi_band_dev
 tdi_lower_band = tdi_band_basis - tdi_band_dev
+
+// 2.5 Session State (used for both visuals and trading filter)
+// Use specific market timezones for each session definition
+bool in_asia = not na(time(timeframe.period, asia_sess_time, "Asia/Tokyo"))
+bool in_london = not na(time(timeframe.period, london_sess_time, "Europe/London"))
+bool in_ny = not na(time(timeframe.period, ny_sess_time, "America/New_York"))
+// Combined session pass condition for entry logic
+bool session_pass = not use_session_filter or (trade_asia and in_asia) or (trade_london and in_london) or (trade_ny and in_ny)
 
 
 // --- 3. STRATEGY LOGIC ---
@@ -166,7 +181,8 @@ var float short_trail_act_price = na
 var float short_trail_offset_ticks = na
 
 // --- ENTRY EXECUTION ---
-if (buy_trigger and strategy.position_size == 0)
+// Gate actual orders by session_pass so entries occur only in allowed sessions
+if (buy_trigger and strategy.position_size == 0 and session_pass)
     // Calculate Fixed SL/TP
     long_stop_price := close - (atr * sl_multiplier)
     long_tp_price := close + (atr * tp_multiplier)
@@ -179,7 +195,7 @@ if (buy_trigger and strategy.position_size == 0)
 
     strategy.entry("Buy", strategy.long)
 
-if (sell_trigger and strategy.position_size == 0)
+if (sell_trigger and strategy.position_size == 0 and session_pass)
     // Calculate Fixed SL/TP
     short_stop_price := close + (atr * sl_multiplier)
     short_tp_price := close - (atr * tp_multiplier)
@@ -244,10 +260,7 @@ color bg_color = filter_passed ? (is_uptrend ? color.new(color.blue, 90) : is_do
 bgcolor(bg_color, title="Trend Background")
 
 // 5.4. (NEW) Session Backgrounds
-// Logic to check if current bar time is in session (Specific Timezones used)
-bool in_asia = not na(time(timeframe.period, asia_sess_time, "Asia/Tokyo"))
-bool in_london = not na(time(timeframe.period, london_sess_time, "Europe/London"))
-bool in_ny = not na(time(timeframe.period, ny_sess_time, "America/New_York"))
+// Use the previously computed in_asia/in_london/in_ny to draw backgrounds
 
 bgcolor(show_sessions and in_asia ? asia_color : na, title="Asia Session Background")
 bgcolor(show_sessions and in_london ? london_color : na, title="London Session Background")
