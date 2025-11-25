@@ -257,7 +257,7 @@ plotshape(sell_trigger,
 
 // 5.3. Background Color based on Trend
 color bg_color = filter_passed ? (is_uptrend ? color.new(color.blue, 90) : is_downtrend ? color.new(color.orange, 90) : na) : color.new(color.gray, 90)
-bgcolor(bg_color, title="Trend Background")
+// bgcolor(bg_color, title="Trend Background")
 
 // 5.4. (NEW) Session Backgrounds
 // Use the previously computed in_asia/in_london/in_ny to draw backgrounds
