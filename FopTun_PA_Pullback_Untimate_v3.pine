@@ -68,15 +68,15 @@ grp_sess = "Session Settings"
 show_sessions = input.bool(true, "Show Session Backgrounds", group=grp_sess)
 // Asia (Tokyo) default: 09:00 - 15:00 JST
 asia_sess_time = input.session("0700-1630", "Asia Session Time", group=grp_sess)
-asia_color = input.color(color.new(color.blue, 92), "Asia Color", group=grp_sess)
+asia_color = input.color(color.new(color.blue, 85), "Asia Color", group=grp_sess)
 
 // London default: 08:00 - 16:30 London Time
 london_sess_time = input.session("0730-1630", "London Session Time", group=grp_sess)
-london_color = input.color(color.new(color.green, 92), "London Color", group=grp_sess)
+london_color = input.color(color.new(color.green, 85), "London Color", group=grp_sess)
 
 // New York default: 08:00 - 17:00 New York Time
 ny_sess_time = input.session("0800-1700", "New York Session Time", group=grp_sess)
-ny_color = input.color(color.new(color.red, 92), "New York Color", group=grp_sess)
+ny_color = input.color(color.new(color.red, 85), "New York Color", group=grp_sess)
 
 // Session Trading Controls
 use_session_filter = input.bool(false, "Filter by Session (Enable Trading Only in Selected Sessions)", group=grp_sess,
